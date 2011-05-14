@@ -1,10 +1,12 @@
-var http = require('http');
 var fs = require('fs');
 var net = require('net');
+var sys = require('sys');
+var http = require('http');
 
 var controller = require('./controller.js');
 var view = require('./view.js');
 var environment = require('./environment.js');
+var client = require('./client.js');
 
 /* HTTP Server */
 
@@ -35,7 +37,7 @@ http.createServer(function(req, res)
 
 /* TCP Server */
 
-net.createServer(function(socket)
+/*net.createServer(function(socket)
 {
     environment.players.push(
     {
@@ -51,7 +53,7 @@ net.createServer(function(socket)
         {
             if(!environment.players[i].active)
             {
-                //continue;
+                continue;
             }
             if(environment.players[i].socket != socket || 1)
             {
@@ -63,10 +65,6 @@ net.createServer(function(socket)
     {
         for(var i = 0; i < environment.players.length; i++)
         {
-            if(!environment.players[i].active)
-            {
-                continue;
-            }
             if(environment.players[i].socket == socket)
             {
                 environment.players.splice(i, 1);
@@ -76,8 +74,68 @@ net.createServer(function(socket)
         }
     });
 
-}).listen(1338, "0.0.0.0");
+}).listen(1338, "0.0.0.0");*/
+
+/* Web socket server */
+
+var ws = require('./vendor/websocket-server/lib/ws/server.js');
+ 
+var server = ws.createServer();
+
+server.addListener('listening', function()
+{
+    console.log('Socket server listening for connections....');
+});
+ 
+server.addListener('connection', function(conn)
+{
+    console.log('New socket connection, ID: ' + conn.id);
+    
+    environment.players.push(
+    {
+        conn: conn,
+        active: false,
+        points: 0,
+        name: 'Guest'
+    });
+    
+    conn.addListener('close', function()
+    {
+        console.log('Socket server connection closed, ID: ' + conn.id);
+        
+        for(var i = 0; i < environment.players.length; i++)
+        {
+            if(environment.players[i].conn == conn)
+            {
+                environment.players.splice(i, 1);
+                
+                return;
+            }
+        }
+    });
+    
+    conn.addListener('message', function(message)
+    {
+        console.log('Socket server message received from ID: ' + conn.id);
+        console.log(message);
+        
+        try
+        {
+            message = JSON.parse(message);   
+        }
+        catch(e){}
+        
+        if(message.type == 'nameResponse')
+        {
+            client.validateName(message.content.name, client.getIdByConn(conn));
+        }
+    });
+    
+    client.socketMessage(JSON.stringify({ type: 'nameRequest' }), environment.players.length - 1);
+});
+
+server.listen(1338, "0.0.0.0");
 
 /* Hello world */
 
-console.log('Server running at http://127.0.0.1:1337/');
+console.log('Server running...');
